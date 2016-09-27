@@ -75,6 +75,7 @@ class TypeAliasTemplateDecl;
 class TypeLoc;
 class UnresolvedSetImpl;
 class VarTemplateDecl;
+class CompilerInstance;
 
 /// A container of type source information.
 ///
