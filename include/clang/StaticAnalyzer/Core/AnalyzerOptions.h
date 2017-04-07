@@ -304,8 +304,8 @@ private:
   /// \sa shouldDisplayNotesAsEvents
   Optional<bool> DisplayNotesAsEvents;
 
-  /// \sa getXTUDir
-  Optional<StringRef> XTUDir;
+  /// \sa getCTUDir
+  Optional<StringRef> CTUDir;
 
   /// A helper function that retrieves option for a given full-qualified
   /// checker name.
@@ -625,8 +625,8 @@ public:
   /// to false when unset.
   bool shouldDisplayNotesAsEvents();
 
-  /// Returns the directory containing the XTU related files.
-  StringRef getXTUDir();
+  /// Returns the directory containing the CTU related files.
+  StringRef getCTUDir();
 
 public:
   AnalyzerOptions() :
