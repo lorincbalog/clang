@@ -197,12 +197,12 @@ public:
   /// translation unit.
   FunctionSummariesTy FunctionSummaries;
 
-  AnalysisConsumer(CompilerInstance &CI, const Preprocessor &pp,
-                   const std::string &outdir, AnalyzerOptionsRef opts,
-                   ArrayRef<std::string> plugins, CodeInjector *injector)
-      : RecVisitorMode(0), RecVisitorBR(nullptr), Ctx(nullptr), PP(pp),
-        OutDir(outdir), Opts(std::move(opts)), Plugins(plugins),
-        Injector(injector), CTU(CI) {
+  AnalysisConsumer(CompilerInstance &CI, const std::string &outdir,
+                   AnalyzerOptionsRef opts, ArrayRef<std::string> plugins,
+                   CodeInjector *injector)
+      : RecVisitorMode(0), RecVisitorBR(nullptr), Ctx(nullptr),
+        PP(CI.getPreprocessor()), OutDir(outdir), Opts(std::move(opts)),
+        Plugins(plugins), Injector(injector), CTU(CI) {
     DigestAnalyzerOptions();
     if (Opts->PrintStats || Opts->shouldSerializeStats()) {
       AnalyzerTimers = llvm::make_unique<llvm::TimerGroup>(
@@ -769,7 +769,7 @@ ento::CreateAnalysisConsumer(CompilerInstance &CI) {
   bool hasModelPath = analyzerOpts->Config.count("model-path") > 0;
 
   return llvm::make_unique<AnalysisConsumer>(
-      CI, CI.getPreprocessor(), CI.getFrontendOpts().OutputFile, analyzerOpts,
+      CI, CI.getFrontendOpts().OutputFile, analyzerOpts,
       CI.getFrontendOpts().Plugins,
       hasModelPath ? new ModelInjector(CI) : nullptr);
 }
