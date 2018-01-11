@@ -443,3 +443,9 @@ bool AnalyzerOptions::naiveCTUEnabled() {
   }
   return NaiveCTU.getValue();
 }
+
+StringRef AnalyzerOptions::getCTUIndexName() {
+  if (!CTUIndexName.hasValue())
+    CTUIndexName = getOptionAsString("ctu-index-name", "externalFnMap.txt");
+  return CTUIndexName.getValue();
+}
