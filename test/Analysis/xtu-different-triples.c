@@ -5,6 +5,7 @@
 
 // We expect an error in this file, but without a location.
 // expected-error-re@./xtu-different-triples.c:*{{imported AST from {{.*}} had been generated for a different target}}
+// expected-error-re@./xtu-different-triples.c:*{{ToOS{{.*}}}}
 
 int f(int);
 

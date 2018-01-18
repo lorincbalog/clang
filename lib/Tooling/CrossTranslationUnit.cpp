@@ -184,12 +184,20 @@ const FunctionDecl *CrossTranslationUnit::getCrossTUDefinition(
       }
 
       // The imported AST had been generated for a different target
-      if (Context.getTargetInfo().getTriple() !=
-          Unit->getASTContext().getTargetInfo().getTriple()) {
+      const auto& TripleTo = Context.getTargetInfo().getTriple();
+      const auto& TripleFrom = Unit->getASTContext().getTargetInfo().getTriple();
+      if (TripleTo != TripleFrom) {
         // TODO pass the SourceLocation of the CallExpression for more precise
         // diagnostics
         Context.getDiagnostics().Report(diag::err_ctu_incompat_triple)
-            << ASTFileName;
+            << ASTFileName << TripleTo.str() << TripleFrom.str() <<
+            TripleTo.getArch() << TripleFrom.getArch() <<
+            TripleTo.getSubArch() << TripleFrom.getSubArch() <<
+            TripleTo.getVendor() << TripleFrom.getVendor();
+        Context.getDiagnostics().Report(diag::err_ctu_incompat_triple2) <<
+            TripleTo.getOS() << TripleFrom.getOS() <<
+            TripleTo.getEnvironment() << TripleFrom.getEnvironment() <<
+            TripleTo.getObjectFormat() << TripleFrom.getObjectFormat();
         return nullptr;
       }
 
