@@ -1,0 +1,7 @@
+[
+{
+  "directory": "test_dir",
+  "command": "clang++ -std=c++11 -o test.o test_dir/test.cpp",
+  "file": "test_dir/test.cpp"
+}
+]
