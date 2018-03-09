@@ -1,4 +1,4 @@
-//===- ClangDispCont.cpp ------------------------------------------------===//
+//===- ClangDisplayContext.cpp ------------------------------------------------===//
 //
 //                     The LLVM Compiler Infrastructure
 //
@@ -7,8 +7,10 @@
 //
 //===--------------------------------------------------------------------===//
 //
-// Clang tool which generates and outputs an issue string based on SA,
-// from the location (line, column number) of the issue.
+// Clang tool which generates and outputs an issue string 
+// from the location (line, column number) of the issue. 
+// The format of the string is similar to the Static Analyzer's GetIssueString
+// function's result, defined in lib/StaticAnalyzer/Core/IssueHash.cpp.
 //
 //===--------------------------------------------------------------------===//
 
@@ -19,6 +21,7 @@
 #include "clang/Basic/SourceManager.h"
 #include "clang/Frontend/CompilerInstance.h"
 #include "clang/Frontend/FrontendActions.h"
+#include "clang/Lex/Lexer.h"
 #include "clang/StaticAnalyzer/Core/IssueHash.h"
 #include "clang/Tooling/CommonOptionsParser.h"
 #include "clang/Tooling/Tooling.h"
@@ -35,28 +38,28 @@ using namespace clang::tooling;
 
 static cl::OptionCategory ClangDispContCategory("clang-disp-context options");
 
-static cl::opt<uint> Line(
+static cl::list<unsigned> Lines(
     "line",
     cl::desc("Line number of the issue's position. \n"),
-    cl::cat(ClangDispContCategory));
+    cl::cat(ClangDispContCategory), cl::OneOrMore);
 
-static cl::opt<uint> Col(
-    "col",
+static cl::list<unsigned> Columns(
+    "column",
     cl::desc("Column number of the issue's position. \n"),
-    cl::cat(ClangDispContCategory));
+    cl::cat(ClangDispContCategory), cl::OneOrMore);
 
 class DisplayContextConsumer : public ASTConsumer {
 public:
   DisplayContextConsumer(ASTContext &Context) : Ctx(Context) {}
 
-  ~DisplayContextConsumer() {
-    // Flush results to standard output.
-    outs() << IssueString;
-  }
-
-  virtual void HandleTranslationUnit(ASTContext &Ctx) {
-    if (!Ctx.getDiagnostics().hasErrorOccurred())
-      handleDecl(Ctx.getTranslationUnitDecl());
+  void HandleTranslationUnit(ASTContext &Ctx) override {
+    if (!Ctx.getDiagnostics().hasErrorOccurred()) {
+      for (unsigned i = 0; i != Lines.size(); ++i) {
+        Line = Lines[i];
+        Column = Columns[i];
+        handleDecl(Ctx.getTranslationUnitDecl());
+      }
+    }
   }
 
 private:
@@ -65,25 +68,36 @@ private:
   void handleDecl(const Decl *D);
   void handleStmt(const Stmt *S);
   void setEnclosingDecl(const Decl *D);
-  void setIssueString(const std::string &S);
+  void writeIssueString(const std::string &S);
   
   ASTContext &Ctx;
   FullSourceLoc IssueLoc;
   const Decl *EnclosingDecl;
-  std::string IssueString;
+
+  unsigned Line;
+  unsigned Column;
 };
 
 template <typename T>
 bool DisplayContextConsumer::checkIfInteresting(const T *Node) {
-  // Nodes are only interesting if they contain the line with the issue
+  // Nodes are only interesting if they contain the line with the issue.
   if (!Node)
     return false;
 
   FullSourceLoc L1 = Ctx.getFullLoc(Node->getLocStart());
-  FullSourceLoc L2 = Ctx.getFullLoc(Node->getLocEnd());
+  FullSourceLoc L2 = 
+    Ctx.getFullLoc(Lexer::getLocForEndOfToken(Node->getLocEnd(), 0,
+                          Ctx.getSourceManager(), Ctx.getLangOpts()));
+  
+  if (!L1.isValid() || !L2.isValid())
+    return false;
 
-  return L1.isValid() && L2.isValid() &&
-         Line <= L2.getExpansionLineNumber() &&
+  if (Line == L1.getExpansionLineNumber() && 
+      Line == L2.getExpansionLineNumber())
+    return Column <= L2.getExpansionColumnNumber() &&
+           L1.getExpansionColumnNumber() <= Column;
+
+  return Line <= L2.getExpansionLineNumber() &&
          L1.getExpansionLineNumber() <= Line;
 }
 
@@ -98,6 +112,7 @@ void DisplayContextConsumer::handleDecl(const Decl *D) {
     for (const Decl *D : DC->decls()) {
       if (!checkIfInteresting<Decl>(D))
         continue;
+
       handleDecl(D);
       return;
     }
@@ -107,8 +122,15 @@ void DisplayContextConsumer::handleDecl(const Decl *D) {
   IssueLoc = Ctx.getFullLoc(D->getLocation()).getExpansionLoc();
   
   handleStmt(D->getBody());
-  setIssueString(clang::GetIssueString(Ctx.getSourceManager(), IssueLoc, "",
-                                       "", EnclosingDecl, Ctx.getLangOpts()));
+  
+  if (!IssueLoc.isValid() || IssueLoc.getExpansionLineNumber() != Line) {
+    outs() << "Line " << Line << " and column " << Column
+           << " does not specify an issue. \n";
+    return;
+  }
+
+  writeIssueString(GetIssueString(Ctx.getSourceManager(), IssueLoc, "",
+                                  "", EnclosingDecl, Ctx.getLangOpts()));
 }
 
 void DisplayContextConsumer::handleStmt(const Stmt *S) {
@@ -125,22 +147,24 @@ void DisplayContextConsumer::handleStmt(const Stmt *S) {
 }
 
 void DisplayContextConsumer::setEnclosingDecl(const Decl *D) {
-  // If the issue is located in a DeclaratorDecl which is not
+  // If the issue is located in a ValueDecl which is not
   // a FunctionDecl, traverse up until the enclosing context is found.
   // This function aims to solve issues especially with VarDecls.
-  while (dyn_cast<DeclaratorDecl>(D) && !dyn_cast<FunctionDecl>(D)) {
+  while (isa<ValueDecl>(D) && !isa<FunctionDecl>(D)) {
     D = dyn_cast<Decl>(D->getDeclContext());
   }
   EnclosingDecl = D;
 }
 
-void DisplayContextConsumer::setIssueString(const std::string &SAIssue) {
+void DisplayContextConsumer::writeIssueString(const std::string &SAIssue) {
   // Since Location is provided as a range, the IssueString from Clang SA
   // has to be modified by replacing the column number, and removing
-  // the first and last delimeters (CheckerName and BugType not provided)
-  IssueString = std::regex_replace(SAIssue.substr(1, SAIssue.size()-2),
+  // the first and last '$' delimeters (CheckerName and BugType not provided).
+  // Original function definition is in lib/StaticAnalyzer/Core/IssueHash.cpp,
+  // if that changes, this function might not provide satisfactory results.
+  outs() << std::regex_replace(SAIssue.substr(1, SAIssue.size() - 2),
                                    std::regex(R"(\$\d+\$)"),
-                                   "$$" + Twine(Col).str() + "$$");
+                                   "$$" + Twine(Column).str() + "$$") << "\n";
 }
 
 class DisplayContextAction : public ASTFrontendAction {
@@ -161,9 +185,16 @@ int main(int argc, const char **argv) {
                          "(similar to Clang Static Analyzer's IssueString) "
                          "from the position of the issue in the source. \n";
   CommonOptionsParser OptionsParser(argc, argv, ClangDispContCategory,
-                                    cl::ZeroOrMore, Overview);
+                                    cl::Required, Overview);
 
   ClangTool Tool(OptionsParser.getCompilations(),
                  OptionsParser.getSourcePathList());
+  
+  if (Lines.size() != Columns.size()) {
+    errs() << "Number of lines and columns must be the same. \n";
+    return 1;
+  }
+
   return Tool.run(newFrontendActionFactory<DisplayContextAction>().get());
 }
+

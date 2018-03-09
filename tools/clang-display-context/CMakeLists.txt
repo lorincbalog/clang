@@ -1,12 +1,7 @@
-set(LLVM_LINK_COMPONENTS
-  ${LLVM_TARGETS_TO_BUILD}
-  asmparser
-  support
-  mc
-  )
+set(LLVM_LINK_COMPONENTS support)
 
 add_clang_executable(clang-display-context
-  ClangDispCont.cpp
+  ClangDisplayContext.cpp
   )
 
 target_link_libraries(clang-display-context
@@ -14,8 +9,10 @@ target_link_libraries(clang-display-context
   clangAST
   clangBasic
   clangFrontend
+  clangLex
   clangStaticAnalyzerCore
   )
 
 install(TARGETS clang-display-context
   RUNTIME DESTINATION bin)
+
