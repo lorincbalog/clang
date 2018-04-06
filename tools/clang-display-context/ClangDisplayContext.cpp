@@ -28,10 +28,8 @@
 #include "llvm/ADT/Twine.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/raw_ostream.h"
+#include "llvm/Support/Regex.h"
 #include "llvm/Support/Signals.h"
-
-#include <regex>
-#include <string>
 
 using namespace llvm;
 using namespace clang;
@@ -167,9 +165,9 @@ void DisplayContextConsumer::setIssueString(const std::string &SAIssue) {
   // the first and last '$' delimeters (CheckerName and BugType not provided).
   // Original function definition is in lib/StaticAnalyzer/Core/IssueHash.cpp,
   // if that changes, this function might not provide satisfactory results.
-  IssueString = std::regex_replace(SAIssue.substr(1, SAIssue.size() - 2),
-                                   std::regex(R"(\$\d+\$)"),
-                                   "$$" + Twine(Column).str() + "$$");
+  Regex Rx(R"(\$[0-9]+\$)");
+  IssueString = Rx.sub("$" + Twine(Column).str() + "$",
+                       SAIssue.substr(1, SAIssue.size() - 2));
 }
 
 void DisplayContextConsumer::setIssueStringToDefault() {
